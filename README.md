@@ -1,2 +1,58 @@
 # taiwan-stock-monitor
 自動化台股全方位監控系統：每日產出 9 張（週/月/年 × 高/收/低）10% 分箱報酬分析圖表，並透過 Resend API 發送互動式電子郵件報表。  Automated Taiwan Stock Monitor: Generates 9 comprehensive charts (Week/Month/Year × High/Close/Low) with 10% bin return analysis, delivering interactive daily email reports via Resend API.
+
+
+
+
+
+
+![googlesheet1](image/unnamed (1).png)
+
+
+
+![googlesheet1](image/unnamed (2).png)
+
+
+
+![googlesheet1](image/unnamed (3).png)
+
+
+![googlesheet1](image/unnamed (4).png)
+
+
+![googlesheet1](image/unnamed (5).png)
+
+
+![googlesheet1](image/unnamed (6.png)
+
+
+
+![googlesheet1](image/unnamed (7.png)
+
+
+
+![googlesheet1](image/unnamed (8.png)
+
+
+![googlesheet1](image/unnamed (9.png)
+
+
+![googlesheet1](image/1.png)
+
+
+
+![googlesheet1](image/2.png)
+
+
+![googlesheet1](image/3.png)
+
+
+![googlesheet1](image/4.png)
+
+
+
+![googlesheet1](image/1.png)
+
+
+
+
