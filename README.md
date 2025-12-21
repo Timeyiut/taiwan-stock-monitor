@@ -69,14 +69,6 @@ A fully automated Taiwan stock market monitoring system that performs multi-thre
 
 
 
-![googlesheet1](image/year_close.png)
-
-
-
-![googlesheet1](image/year_high.png)
-
-
-![googlesheet1](image/year_low.png)
 
 
 ![googlesheet1](image/1.png)
