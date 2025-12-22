@@ -67,7 +67,6 @@ A professional-grade, multi-market automated monitoring and data warehousing sys
 - **Cloud Sync**: Google Drive API
 
 
-
 ⚠️ Data Integrity & Learning Note (資料完整性與練習說明)
 [!IMPORTANT] [English] Raw Data vs. Production Ready This repository currently provides Raw Data without deep post-processing. Users may encounter anomalies such as Corporate Action Gaps (unadjusted splits) or Resume Jumps (suspension noise) that may lead to distorted return calculations (e.g., ghost >100% monthly returns).
 
