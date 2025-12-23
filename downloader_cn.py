@@ -14,7 +14,7 @@ DATA_DIR = os.path.join(BASE_DIR, "data", MARKET_CODE, DATA_SUBDIR)
 LIST_DIR = os.path.join(BASE_DIR, "data", MARKET_CODE, "lists")
 CACHE_LIST_PATH = os.path.join(LIST_DIR, "cn_stock_list_cache.json")
 
-# 🛡️ 穩定性優先：保持 4 個執行緒，這是對 GitHub Actions 最穩定的設定
+# 🛡️ 穩定性優先：保持 4 個執行緒，避免觸發 Yahoo Finance 對 GitHub IP 的封鎖
 THREADS_CN = 4 
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(LIST_DIR, exist_ok=True)
@@ -23,6 +23,7 @@ def log(msg: str):
     print(f"{pd.Timestamp.now():%H:%M:%S}: {msg}")
 
 def ensure_pkg(pkg: str):
+    """自動檢查並安裝必要的套件"""
     try:
         __import__(pkg)
     except ImportError:
@@ -45,10 +46,10 @@ def get_cn_list():
                     if len(data) >= threshold:
                         log(f"📦 載入今日快取 (共 {len(data)} 檔)")
                         return data
-        except Exception as e:
-            log(f"⚠️ 快取讀取失敗: {e}")
+        except Exception:
+            pass
 
-    # 2. 獲取清單
+    # 2. 從 Akshare 獲取
     log("📡 嘗試從 Akshare EM 接口獲取清單...")
     try:
         df_sh = ak.stock_sh_a_spot_em()
@@ -59,7 +60,9 @@ def get_cn_list():
         valid_prefixes = ('000','001','002','003','300','301','600','601','603','605','688')
         df = df[df['code'].str.startswith(valid_prefixes)]
         
-        res = [f"{row['code']}&{row['名稱']}" if '名稱' in row else f"{row['code']}&{row['名称']}" for _, row in df.iterrows()]
+        # 相容不同版本的欄位名稱
+        name_col = '名称' if '名称' in df.columns else '名稱'
+        res = [f"{row['code']}&{row[name_col]}" for _, row in df.iterrows()]
         
         if len(res) >= threshold:
             with open(CACHE_LIST_PATH, "w", encoding="utf-8") as f:
@@ -69,22 +72,93 @@ def get_cn_list():
     except Exception as e:
         log(f"⚠️ EM 接口失敗: {e}")
 
-    # 3. 歷史備援
+    # 3. 歷史快取保底
     if os.path.exists(CACHE_LIST_PATH):
-        log("🔄 接口全數失敗，使用歷史快取備援...")
+        log("🔄 接口失敗，使用歷史快取備援...")
         with open(CACHE_LIST_PATH, "r", encoding="utf-8") as f:
             return json.load(f)
 
     return ["600519&貴州茅台", "000001&平安銀行", "300750&寧德時代"]
 
 def download_one(item):
-    """強化穩定版下載邏輯：針對 A 股風控優化"""
-    code, name = item.split('&', 1)
-    symbol = f"{code}.SS" if code.startswith('6') else f"{code}.SZ"
-    out_path = os.path.join(DATA_DIR, f"{code}_{name}.csv")
+    """單檔下載邏輯：具備重試與強化防封鎖"""
+    try:
+        code, name = item.split('&', 1)
+        symbol = f"{code}.SS" if code.startswith('6') else f"{code}.SZ"
+        out_path = os.path.join(DATA_DIR, f"{code}_{name}.csv")
 
-    # 續跑機制
-    if os.path.exists(out_path) and os.path.getsize(out_path) > 1000:
-        return {"status": "exists", "code": code}
+        # 續跑機制：跳過已存在的檔案
+        if os.path.exists(out_path) and os.path.getsize(out_path) > 1000:
+            return {"status": "exists", "code": code}
 
-    #
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                # 🛡️ 隨機延遲保護：0.7 ~ 1.5 秒
+                time.sleep(random.uniform(0.7, 1.5)) 
+                
+                tk = yf.Ticker(symbol)
+                hist = tk.history(period="2y", timeout=25)
+                
+                if hist is not None and not hist.empty:
+                    hist.reset_index(inplace=True)
+                    hist.columns = [c.lower() for c in hist.columns]
+                    if 'date' in hist.columns:
+                        hist['date'] = pd.to_datetime(hist['date'], utc=True).dt.tz_localize(None)
+                    
+                    hist.to_csv(out_path, index=False, encoding='utf-8-sig')
+                    return {"status": "success", "code": code}
+                
+                if attempt == max_retries - 1:
+                    return {"status": "empty", "code": code}
+                    
+            except Exception:
+                if attempt == max_retries - 1:
+                    return {"status": "error", "code": code}
+                # 失敗後拉長休息時間 (5-12秒)
+                time.sleep(random.randint(5, 12)) 
+    except Exception:
+        return {"status": "error", "code": item.split('&')[0]}
+            
+    return {"status": "error", "code": code}
+
+# 💡 核心修正：明確定義 main() 函數供外部調用
+def main():
+    start_time = time.time()
+    log("🇨🇳 中國 A 股數據同步器啟動 (穩定恢復版)")
+    
+    items = get_cn_list()
+    log(f"🚀 目標總數: {len(items)} 檔")
+    
+    stats = {"success": 0, "exists": 0, "empty": 0, "error": 0}
+    
+    # 使用 ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=THREADS_CN) as executor:
+        futures = {executor.submit(download_one, it): it for it in items}
+        pbar = tqdm(total=len(items), desc="下載進度")
+        
+        for f in as_completed(futures):
+            res = f.result()
+            stats[res.get("status", "error")] += 1
+            pbar.update(1)
+        
+        pbar.close()
+
+    # 計算統計數據回傳給主管程式 (main.py)
+    total_expected = len(items)
+    effective_success = stats['success'] + stats['exists']
+    fail_count = stats['error'] + stats['empty']
+
+    download_stats = {
+        "total": total_expected,
+        "success": effective_success,
+        "fail": fail_count
+    }
+
+    duration = (time.time() - start_time) / 60
+    log(f"📊 執行報告: 成功(含舊檔)={effective_success}, 失敗={fail_count}, 耗時={duration:.1f}分鐘")
+    
+    return download_stats
+
+if __name__ == "__main__":
+    main()
